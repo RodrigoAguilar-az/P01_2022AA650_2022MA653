@@ -25,7 +25,6 @@ namespace P01_2022AA650_2022MA653.Models
         [StringLength(20)]
         public string Estado { get; set; }
 
-        // Propiedades de navegación
         [ForeignKey("SucursalId")]
         public virtual Sucursales Sucursal { get; set; }
 

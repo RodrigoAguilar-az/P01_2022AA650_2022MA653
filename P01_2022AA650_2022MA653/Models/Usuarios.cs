@@ -23,7 +23,6 @@ namespace P01_2022AA650_2022MA653.Models
         [Required]
         public string Rol { get; set; }
 
-        // Propiedades de navegación
         public virtual ICollection<Sucursales> Sucursales { get; set; }
         public virtual ICollection<Reservas> Reservas { get; set; }
     }

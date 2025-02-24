@@ -23,7 +23,6 @@ namespace P01_2022AA650_2022MA653.Models
         [Required]
         public int NumeroEspaciosDisponibles { get; set; }
 
-        // Propiedades de navegación
         [ForeignKey("UsuarioId")]
         public virtual Usuarios Usuario { get; set; }
 
