@@ -19,7 +19,6 @@ namespace P01_2022AA650_2022MA653.Controllers
         [HttpPost("reservar")]
         public async Task<IActionResult> Reservar([FromBody] Reservas request)
         {
-            // Verificar que el espacio esté disponible
             var espacio = await _claseContext.EspaciosParqueo
                 .FirstOrDefaultAsync(e => e.Id == request.EspacioParqueoId && e.Estado == "Disponible");
 
@@ -28,12 +27,10 @@ namespace P01_2022AA650_2022MA653.Controllers
 
             var nuevaHoraFin = request.HoraInicio.Add(TimeSpan.FromHours(request.CantidadHoras));
 
-            // Obtener reservas existentes del mismo espacio y fecha
             var reservasExistentes = await _claseContext.Reservas
                 .Where(r => r.EspacioParqueoId == request.EspacioParqueoId && r.Fecha.Date == request.Fecha.Date)
                 .ToListAsync();
 
-            // Verificar conflictos de horario
             bool existeConflicto = reservasExistentes.Any(r =>
             {
                 var horaFinExistente = r.HoraInicio.Add(TimeSpan.FromHours(r.CantidadHoras));
@@ -43,7 +40,6 @@ namespace P01_2022AA650_2022MA653.Controllers
             if (existeConflicto)
                 return BadRequest("Ya existe una reserva en el rango de horas seleccionado.");
 
-            // Crear la reserva
             var reserva = new Reservas
             {
                 UsuarioId = request.UsuarioId,
@@ -63,10 +59,7 @@ namespace P01_2022AA650_2022MA653.Controllers
         [HttpGet("reservas-activas/{usuarioId}")]
         public async Task<IActionResult> GetReservasActivas(int usuarioId)
         {
-            // Obtener la fecha y hora actual
             var ahora = DateTime.Now;
-
-            // Realizar el Join entre Reservas y EspaciosParqueo
             var reservasActivas = await (from r in _claseContext.Reservas
                                          join e in _claseContext.EspaciosParqueo
                                          on r.EspacioParqueoId equals e.Id
@@ -96,9 +89,60 @@ namespace P01_2022AA650_2022MA653.Controllers
             return Ok(reservasActivas);
         }
 
+        [HttpDelete("cancelar/{reservaId}")]
+        public async Task<IActionResult> CancelarReserva(int reservaId)
+        {
+            var reserva = await _claseContext.Reservas
+                .FirstOrDefaultAsync(r => r.Id == reservaId);
 
+            if (reserva == null)
+                return NotFound("Reserva no encontrada.");
 
+            var ahora = DateTime.Now;
 
+            if (reserva.Fecha.Date < ahora.Date ||
+               (reserva.Fecha.Date == ahora.Date && reserva.HoraInicio <= ahora.TimeOfDay))
+            {
+                return BadRequest("No se puede cancelar una reserva que ya pasó.");
+            }
+
+            _claseContext.Reservas.Remove(reserva);
+            await _claseContext.SaveChangesAsync();
+
+            return Ok("Reserva cancelada con éxito.");
+        }
+
+        [HttpGet("espacios-reservados/{sucursalId}")]
+        public async Task<IActionResult> GetEspaciosReservados(int sucursalId, [FromQuery] DateTime fechaInicio, [FromQuery] DateTime fechaFin)
+        {
+            var espaciosReservados = await (from r in _claseContext.Reservas
+                                            join e in _claseContext.EspaciosParqueo
+                                            on r.EspacioParqueoId equals e.Id
+                                            where e.SucursalId == sucursalId &&
+                                                  r.Fecha.Date >= fechaInicio.Date &&
+                                                  r.Fecha.Date <= fechaFin.Date
+                                            select new
+                                            {
+                                                r.Id,
+                                                r.UsuarioId,
+                                                r.EspacioParqueoId,
+                                                r.Fecha,
+                                                r.HoraInicio,
+                                                r.CantidadHoras,
+                                                EspacioParqueo = new
+                                                {
+                                                    e.Numero,
+                                                    e.Ubicacion,
+                                                    e.CostoPorHora
+                                                }
+                                            })
+                                             .ToListAsync();
+
+            if (espaciosReservados.Count == 0)
+                return Ok("No hay espacios reservados en ese rango de fechas.");
+
+            return Ok(espaciosReservados);
+        }
 
     }
 }
