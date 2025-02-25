@@ -24,10 +24,5 @@ namespace P01_2022AA650_2022MA653.Models
         [Required]
         [StringLength(20)]
         public string Estado { get; set; }
-
-        [ForeignKey("SucursalId")]
-        public virtual Sucursales Sucursal { get; set; }
-
-        public virtual ICollection<Reservas> Reservas { get; set; }
     }
 }

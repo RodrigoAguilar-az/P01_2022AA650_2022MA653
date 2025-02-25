@@ -22,10 +22,5 @@ namespace P01_2022AA650_2022MA653.Models
 
         [Required]
         public int NumeroEspaciosDisponibles { get; set; }
-
-        [ForeignKey("UsuarioId")]
-        public virtual Usuarios Usuario { get; set; }
-
-        public virtual ICollection<EspaciosParqueo> EspaciosParqueo { get; set; }
     }
 }
