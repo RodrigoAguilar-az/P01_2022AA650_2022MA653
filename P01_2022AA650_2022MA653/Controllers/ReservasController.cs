@@ -112,6 +112,45 @@ namespace P01_2022AA650_2022MA653.Controllers
             return Ok("Reserva cancelada con éxito.");
         }
 
+        [HttpGet("reservas-por-dia")]
+        public async Task<IActionResult> GetReservasPorDia([FromQuery] DateTime fecha)
+        {
+            var reservasPorDia = await (from r in _claseContext.Reservas
+                                        join e in _claseContext.EspaciosParqueo
+                                        on r.EspacioParqueoId equals e.Id
+                                        join s in _claseContext.Sucursales
+                                        on e.SucursalId equals s.Id
+                                        where r.Fecha.Date == fecha.Date
+                                        select new
+                                        {
+                                            r.Id,
+                                            r.UsuarioId,
+                                            r.EspacioParqueoId,
+                                            r.Fecha,
+                                            r.HoraInicio,
+                                            r.CantidadHoras,
+                                            EspacioParqueo = new
+                                            {
+                                                e.Numero,
+                                                e.Ubicacion,
+                                                e.CostoPorHora,
+                                                Sucursal = new
+                                                {
+                                                    s.Nombre,
+                                                    s.Direccion,
+                                                    s.Telefono
+                                                }
+                                            }
+                                        })
+                                         .ToListAsync();
+
+            if (reservasPorDia.Count == 0)
+                return Ok("No hay reservas para el día solicitado.");
+
+            return Ok(reservasPorDia);
+        }
+
+
         [HttpGet("espacios-reservados/{sucursalId}")]
         public async Task<IActionResult> GetEspaciosReservados(int sucursalId, [FromQuery] DateTime fechaInicio, [FromQuery] DateTime fechaFin)
         {
