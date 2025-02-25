@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using P01_2022AA650_2022MA653.Models;
 
 namespace P01_2022AA650_2022MA653.Controllers
@@ -15,57 +16,89 @@ namespace P01_2022AA650_2022MA653.Controllers
             _claseContext = claseContext;
         }
 
-        // Crear una nueva reserva
-        [HttpPost]
-        [Route("Add")]
-        public IActionResult CrearReserva([FromBody] Reservas reserva)
+        [HttpPost("reservar")]
+        public async Task<IActionResult> Reservar([FromBody] Reservas request)
         {
-            try
+            // Verificar que el espacio esté disponible
+            var espacio = await _claseContext.EspaciosParqueo
+                .FirstOrDefaultAsync(e => e.Id == request.EspacioParqueoId && e.Estado == "Disponible");
+
+            if (espacio == null)
+                return BadRequest("El espacio no está disponible.");
+
+            var nuevaHoraFin = request.HoraInicio.Add(TimeSpan.FromHours(request.CantidadHoras));
+
+            // Obtener reservas existentes del mismo espacio y fecha
+            var reservasExistentes = await _claseContext.Reservas
+                .Where(r => r.EspacioParqueoId == request.EspacioParqueoId && r.Fecha.Date == request.Fecha.Date)
+                .ToListAsync();
+
+            // Verificar conflictos de horario
+            bool existeConflicto = reservasExistentes.Any(r =>
             {
-                var espacio = _claseContext.EspaciosParqueos
-                    .FirstOrDefault(e => e.Id == reserva.EspacioParqueoId);
+                var horaFinExistente = r.HoraInicio.Add(TimeSpan.FromHours(r.CantidadHoras));
+                return request.HoraInicio < horaFinExistente && nuevaHoraFin > r.HoraInicio;
+            });
 
-                if (espacio == null)
-                {
-                    return BadRequest("Espacio de parqueo no existe");
-                }
+            if (existeConflicto)
+                return BadRequest("Ya existe una reserva en el rango de horas seleccionado.");
 
-                if (espacio.Estado != "disponible")
-                {
-                    return BadRequest("El espacio de parqueo no está disponible");
-                }
-        
-                var horaInicio = TimeSpan.Parse(reserva.HoraInicio.ToString());
-                var horaFin = horaInicio.Add(TimeSpan.FromHours(reserva.CantidadHoras));
-
-                var reservasExistentes = _claseContext.Reservas
-                    .Where(r => r.EspacioParqueoId == reserva.EspacioParqueoId &&
-                                r.Fecha == reserva.Fecha)
-                    .ToList();
-
-                foreach (var res in reservasExistentes)
-                {
-                    var resHoraInicio = TimeSpan.Parse(res.HoraInicio.ToString());
-                    var resHoraFin = resHoraInicio.Add(TimeSpan.FromHours(res.CantidadHoras));
-
-                    if ((horaInicio >= resHoraInicio && horaInicio < resHoraFin) ||
-                        (horaFin > resHoraInicio && horaFin <= resHoraFin) ||
-                        (horaInicio <= resHoraInicio && horaFin >= resHoraFin))
-                    {
-                        return BadRequest("Ya existe una reserva para este espacio en el horario");
-                    }
-                }
-
-                _claseContext.Reservas.Add(reserva);
-                _claseContext.SaveChanges();
-
-                return Ok(new { mensaje = "Reserva creada", reserva });
-            }
-            catch (Exception ex)
+            // Crear la reserva
+            var reserva = new Reservas
             {
-                return BadRequest(ex.Message);
-            }
+                UsuarioId = request.UsuarioId,
+                EspacioParqueoId = request.EspacioParqueoId,
+                Fecha = request.Fecha,
+                HoraInicio = request.HoraInicio,
+                CantidadHoras = request.CantidadHoras
+            };
+
+            _claseContext.Reservas.Add(reserva);
+            await _claseContext.SaveChangesAsync();
+
+            return Ok("Reserva creada con éxito.");
         }
+
+
+        [HttpGet("reservas-activas/{usuarioId}")]
+        public async Task<IActionResult> GetReservasActivas(int usuarioId)
+        {
+            // Obtener la fecha y hora actual
+            var ahora = DateTime.Now;
+
+            // Realizar el Join entre Reservas y EspaciosParqueo
+            var reservasActivas = await (from r in _claseContext.Reservas
+                                         join e in _claseContext.EspaciosParqueo
+                                         on r.EspacioParqueoId equals e.Id
+                                         where r.UsuarioId == usuarioId &&
+                                               r.Fecha.Date >= ahora.Date &&
+                                               (r.Fecha.Date > ahora.Date || r.HoraInicio >= ahora.TimeOfDay)
+                                         select new
+                                         {
+                                             r.Id,
+                                             r.UsuarioId,
+                                             r.EspacioParqueoId,
+                                             r.Fecha,
+                                             r.HoraInicio,
+                                             r.CantidadHoras,
+                                             EspacioParqueo = new
+                                             {
+                                                 e.Numero,
+                                                 e.Ubicacion,
+                                                 e.CostoPorHora
+                                             }
+                                         })
+                                          .ToListAsync();
+
+            if (reservasActivas.Count == 0)
+                return Ok("No tienes reservas activas.");
+
+            return Ok(reservasActivas);
+        }
+
+
+
+
 
     }
 }
